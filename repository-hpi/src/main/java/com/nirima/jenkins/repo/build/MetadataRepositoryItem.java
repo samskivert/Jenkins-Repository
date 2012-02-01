@@ -60,7 +60,11 @@ public class MetadataRepositoryItem extends TextRepositoryItem {
     }
 
     public void addArtifact(MavenArtifact artifact, ArtifactRepositoryItem item) {
-        this.items.put(artifact.type, item);
+        // we want to report the newest artifact of a given type
+        ArtifactRepositoryItem have = this.items.get(artifact.type);
+        if (have == null || item.getLastModified().getTime() > have.getLastModified().getTime()) {
+            this.items.put(artifact.type, item);
+        }
     }
 
     public String getName() {
