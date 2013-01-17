@@ -3,14 +3,14 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>1.417</version>
+        <version>1.466</version>
     </parent>
 
     <groupId>com.nirima.jenkins.repository</groupId>
     <artifactId>pom</artifactId>
     <name>Jenkins Maven Repository Server : Project POM</name>
 
-    <version>0.8-SNAPSHOT</version>
+    <version>0.12-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <developers>
@@ -35,20 +35,20 @@
         <module>jenkins-maven-plugin</module>
     </modules>
 
-    <!-- get every artifact through maven.glassfish.org, which proxies all the artifacts that we need -->
-    <repositories>
-        <repository>
-            <id>m.g.o-public</id>
-            <url>http://maven.glassfish.org/content/groups/public/</url>
-        </repository>
-    </repositories>
+   <!-- get every artifact through repo.jenkins-ci.org, which proxies all the artifacts that we need -->
+   <repositories>
+       <repository>
+           <id>repo.jenkins-ci.org</id>
+	   <url>http://repo.jenkins-ci.org/public/</url>
+       </repository>
+   </repositories>
 
-    <pluginRepositories>
-        <pluginRepository>
-            <id>m.g.o-public</id>
-            <url>http://maven.glassfish.org/content/groups/public/</url>
-        </pluginRepository>
-    </pluginRepositories>
+   <pluginRepositories>
+       <pluginRepository>
+            <id>repo.jenkins-ci.org</id>
+            <url>http://repo.jenkins-ci.org/public/</url>
+       </pluginRepository>
+   </pluginRepositories>
 
     <distributionManagement>
         <repository>

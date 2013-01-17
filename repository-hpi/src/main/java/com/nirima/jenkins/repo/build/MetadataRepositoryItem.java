@@ -25,11 +25,10 @@ package com.nirima.jenkins.repo.build;
 
 import hudson.maven.MavenBuild;
 import hudson.maven.reporters.MavenArtifact;
+import hudson.model.Run;
 
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Represents a {@code maven-metadata.xml} file.
@@ -38,14 +37,19 @@ public class MetadataRepositoryItem extends TextRepositoryItem {
 
     private MavenBuild build;
     private String groupId, artifactId, version;
-    private Map<String,ArtifactRepositoryItem> items = new HashMap<String,ArtifactRepositoryItem>();
+    private Map<MavenArtifact,ArtifactRepositoryItem> items = new HashMap<MavenArtifact,ArtifactRepositoryItem>();
 
-    public static String formatDateVersion(Date date) {
+    private static String formatDateVersion(Date date, int buildNo) {
         // we used to tack the build number on here, but that causes problems because the build
         // number seems to be always for the latest build, not the build that generated this
         // artifact; so we just use -1; it is essentially impossible that a project will be built
         // twice in the same millsecond, so there's no risk of collision
-        return _vfmt.format(date) + "-1";
+        return _vfmt.format(date) + "-" + buildNo;
+    }
+
+    public static String formatDateVersion(Run buildRun) {
+        // Create a date/time stamp from a particular run.
+        return formatDateVersion(buildRun.getTime(), buildRun.getNumber());
     }
 
     public MetadataRepositoryItem(MavenBuild build, MavenArtifact artifact) {
@@ -60,11 +64,7 @@ public class MetadataRepositoryItem extends TextRepositoryItem {
     }
 
     public void addArtifact(MavenArtifact artifact, ArtifactRepositoryItem item) {
-        // we want to report the newest artifact of a given type
-        ArtifactRepositoryItem have = this.items.get(artifact.type);
-        if (have == null || item.getLastModified().getTime() > have.getLastModified().getTime()) {
-            this.items.put(artifact.type, item);
-        }
+        this.items.put(artifact, item);
     }
 
     public String getName() {
@@ -83,6 +83,10 @@ public class MetadataRepositoryItem extends TextRepositoryItem {
         return "From Build #" + build.getNumber() + " of " + build.getParentBuild().getParent().getName();
     }
 
+    public String getContentType() {
+        return "application/xml";
+    }
+
     @Override
     protected String generateContent() {
         StringBuilder buf = new StringBuilder();
@@ -93,20 +97,80 @@ public class MetadataRepositoryItem extends TextRepositoryItem {
         buf.append("  <version>" + version + "</version>\n");
         buf.append("  <versioning>\n");
         buf.append("    <snapshotVersions>\n");
-        for (Map.Entry<String,ArtifactRepositoryItem> entry : items.entrySet()) {
-            String dateVers = formatDateVersion(entry.getValue().getLastModified());
-            String itemVersion = version.replaceAll("SNAPSHOT", dateVers);
-            String lastMod = _ufmt.format(entry.getValue().getLastModified());
-            buf.append("      <snapshotVersion>\n");
-            buf.append("        <extension>").append(entry.getKey()).append("</extension>\n");
-            buf.append("        <value>").append(itemVersion).append("</value>\n");
-            buf.append("        <updated>").append(lastMod).append("</updated>\n");
-            buf.append("      </snapshotVersion>\n");
+
+        // It is possible that "items" contains many entries for the same artifact; we
+        // just want the latest.
+
+        Map<String,Entry> entryToBuild = new HashMap<String,Entry>();
+
+        for (Map.Entry<MavenArtifact,ArtifactRepositoryItem> entry : items.entrySet()) {
+
+            Entry e = new Entry(entry);
+            String id = e.toString();
+
+            if( entryToBuild.containsKey(id))
+            {
+                Entry current = entryToBuild.get(id);
+                if( e.isNewerThan(current) )
+                    entryToBuild.put(id, e);
+            }
+            else
+            {
+                entryToBuild.put(id, e);
+            }
         }
+
+        for(Entry e : entryToBuild.values())
+        {
+            e.getSnapshotXml(buf);
+        }
+
         buf.append("    </snapshotVersions>\n");
         buf.append("  </versioning>\n");
         buf.append("</metadata>\n");
         return buf.toString();
+    }
+
+    class Entry {
+        MavenArtifact          theArtifact;
+        ArtifactRepositoryItem theItem;
+
+        public Entry(Map.Entry<MavenArtifact, ArtifactRepositoryItem> entry)
+        {
+            theArtifact = entry.getKey();
+
+            theItem = entry.getValue();
+        }
+
+        public void getSnapshotXml( StringBuilder buf )
+        {
+            //String dateVers = formatDateVersion(entry.getValue().getLastModified());
+            String dateVers = formatDateVersion(theItem.getBuild());
+
+            String itemVersion = version.replaceAll("SNAPSHOT", dateVers);
+            String lastMod = _ufmt.format(theItem.getLastModified());
+            buf.append("      <snapshotVersion>\n");
+
+            // Optional classifier.
+            if( theArtifact.classifier != null && theArtifact.classifier.length() > 0 )
+            {
+                buf.append("        <classifier>").append(theArtifact.classifier).append("</classifier>\n");
+            }
+
+            buf.append("        <extension>").append(theArtifact.type).append("</extension>\n");
+            buf.append("        <value>").append(itemVersion).append("</value>\n");
+            buf.append("        <updated>").append(lastMod).append("</updated>\n");
+            buf.append("      </snapshotVersion>\n");
+        }
+
+        public String toString() {
+            return theArtifact.type + ":" + theArtifact.classifier;
+        }
+
+
+        public boolean isNewerThan(Entry otherEntry) {
+            return theItem.getLastModified().after(otherEntry.theItem.getLastModified());
+        }
     }
 
     protected static SimpleDateFormat _ufmt = new SimpleDateFormat("yyyyMMddHHmmss");
